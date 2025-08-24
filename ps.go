@@ -23,15 +23,36 @@ type Challstr struct {
 	challstr       string
 }
 
-type Client struct {
-	connection *websocket.Conn
-	Connect    func()
-	Send       func(line string)
+type Message struct {
+	Room       string
+	By         string
+	Content    string
+	BeforeJoin bool
+}
+type DirectMessage struct {
+	From       string
+	To         string
+	Content    string
+	BeforeJoin bool
+}
 
-	login    func(challstr Challstr)
-	onLine   func(room string, line string, beforeJoin bool)
-	onBatch  func(batchMessage string)
-	onPacket func(packet string)
+type Client struct {
+	Connect func()
+
+	Send     func(line string)
+	SendRoom func(room string, line string)
+	SendUser func(user string, line string)
+
+	On        func(room string, event string, line string, beforeJoin bool)
+	OnMessage func(message Message)
+	OnPM      func(message DirectMessage)
+	OnConnect func()
+
+	connection *websocket.Conn
+	login      func(challstr Challstr)
+	onLine     func(room string, line string, beforeJoin bool)
+	onBatch    func(batchMessage string)
+	onPacket   func(packet string)
 }
 
 func toId(input string) string {
@@ -61,8 +82,13 @@ func readPump(client *Client) {
 	}
 }
 
-func New(username, password string) *Client {
+func New(username, password string, rooms []string) *Client {
 	client := Client{}
+
+	client.On = func(room string, event string, line string, beforeJoin bool) {}
+	client.OnConnect = func() {}
+	client.OnMessage = func(message Message) {}
+	client.OnPM = func(message DirectMessage) {}
 
 	client.Send = func(line string) {
 		lines := make([]string, 1)
@@ -70,6 +96,12 @@ func New(username, password string) *Client {
 
 		bytes, _ := json.Marshal(lines)
 		client.connection.WriteMessage(websocket.TextMessage, bytes)
+	}
+	client.SendRoom = func(room string, line string) {
+		client.Send(fmt.Sprintf("%s|%s", room, line))
+	}
+	client.SendUser = func(user string, line string) {
+		client.Send(fmt.Sprintf("|/pm %s,%s", user, line))
 	}
 
 	client.login = func(challstr Challstr) {
@@ -136,10 +168,35 @@ func New(username, password string) *Client {
 	client.onLine = func(room string, line string, beforeJoin bool) {
 		input := strings.SplitN(line, "|", 3)
 
-		switch lineType := input[1]; lineType {
+		lineType := ""
+		if len(input) >= 2 {
+			lineType = input[1]
+		}
+		ctx := ""
+		if len(input) == 3 {
+			ctx = input[2]
+		}
+		client.On(room, lineType, ctx, beforeJoin)
+
+		switch lineType {
 		case "challstr":
-			args := strings.SplitN(input[2], "|", 2)
+			args := strings.SplitN(ctx, "|", 2)
 			client.login(Challstr{challengekeyid: args[0], challstr: args[1]})
+		case "updateuser":
+			name := ctx[1:]
+			if !strings.HasPrefix(name, "Guest") {
+				client.OnConnect()
+				for _, joinRoom := range rooms {
+					client.Send(fmt.Sprintf("|/join %s", joinRoom))
+				}
+			}
+		case "c:", "c", "chat":
+			args := strings.SplitN(ctx, "|", 3)
+			client.OnMessage(Message{Room: room, By: args[1], Content: args[2], BeforeJoin: beforeJoin})
+		case "pm":
+			log.Println(ctx)
+			args := strings.SplitN(ctx, "|", 3)
+			client.OnPM(DirectMessage{From: args[0], To: args[1], Content: args[2], BeforeJoin: beforeJoin})
 		}
 	}
 	client.onBatch = func(batchMessage string) {
@@ -182,7 +239,6 @@ func New(username, password string) *Client {
 	client.Connect = func() {
 		nonce := getNonce()
 		websocketUrl := fmt.Sprintf("%s://%s%s/showdown/%s/websocket", "wss", "sim3.psim.us", "", nonce)
-		log.Println(websocketUrl)
 		connection, _, err := websocket.DefaultDialer.Dial(websocketUrl, nil)
 		if err != nil {
 			log.Fatalf("Could not connect to socket")
@@ -190,7 +246,6 @@ func New(username, password string) *Client {
 		client.connection = connection
 
 		go readPump(&client)
-		log.Println("Connected to socket")
 
 		sigs := make(chan os.Signal, 1)
 		signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)

@@ -15,7 +15,18 @@ func main() {
 		log.Fatalf("Could not load .env! If it does not exist, please create it.")
 	}
 
-	psgo := PSGo.New(os.Getenv("PS_USERNAME"), os.Getenv("PS_PASSWORD"))
+	Bot := PSGo.New(os.Getenv("PS_USERNAME"), os.Getenv("PS_PASSWORD"), []string{"botdevelopment"})
 
-	psgo.Connect()
+	Bot.OnMessage = func(message PSGo.Message) {
+		if message.BeforeJoin {
+			return
+		}
+		if message.Content == "Ping!" {
+			Bot.SendRoom(message.Room, "Pong!")
+		}
+	}
+	Bot.OnConnect = func() {
+		log.Println("Connected to Pokémon Showdown")
+	}
+	Bot.Connect()
 }
