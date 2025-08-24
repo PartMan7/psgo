@@ -17,8 +17,14 @@ import (
 )
 
 func Main() {
-    bot := PSGo.New("username", "password")
-	bot.Connect()
+	Bot := PSGo.New("Username", "password", []string{"botdevelopment"})
+
+	Bot.OnMessage = func(message PSGo.Message) {
+		if !message.BeforeJoin && message.Content == "Ping!" {
+			Bot.SendRoom(message.Room, "Pong!")
+		}
+	}
+	Bot.Connect()
 }
 ```
 
