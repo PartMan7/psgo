@@ -61,7 +61,7 @@ func readPump(client *Client) {
 	}
 }
 
-func New(username, password string) (*Client, error) {
+func New(username, password string) *Client {
 	client := Client{}
 
 	client.Send = func(line string) {
@@ -200,5 +200,5 @@ func New(username, password string) (*Client, error) {
 		client.connection.Close()
 	}
 
-	return &client, nil
+	return &client
 }

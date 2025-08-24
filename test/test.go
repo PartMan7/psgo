@@ -15,7 +15,7 @@ func main() {
 		log.Fatalf("Could not load .env! If it does not exist, please create it.")
 	}
 
-	psgo, _ := PSGo.New(os.Getenv("PS_USERNAME"), os.Getenv("PS_PASSWORD"))
+	psgo := PSGo.New(os.Getenv("PS_USERNAME"), os.Getenv("PS_PASSWORD"))
 
 	psgo.Connect()
 }
