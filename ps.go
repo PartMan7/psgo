@@ -8,8 +8,11 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"os"
+	"os/signal"
 	"regexp"
 	"strings"
+	"syscall"
 
 	"github.com/google/go-querystring/query"
 	"github.com/gorilla/websocket"
@@ -189,6 +192,12 @@ func New(username, password string) *Client {
 		go readPump(&client)
 		log.Println("Connected to socket")
 
+		sigs := make(chan os.Signal, 1)
+		signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+
+		<-sigs // Wait for interrupt or terminate signal
+		log.Println("Shutting down...")
+		client.connection.Close()
 	}
 
 	return &client
